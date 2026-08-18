@@ -1,4 +1,6 @@
 CompileFlags:
   Remove:
-    - -mmcu=*
+    - -flto
     - -fno-fat-lto-objects
+  Add:
+    - --target=avr
