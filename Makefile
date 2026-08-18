@@ -1,7 +1,10 @@
 FQBN := arduino:avr:uno
 PORT := /dev/ttyUSB0
 
-.PHONY: build up
+.PHONY: init build up
+
+init:
+	arduino-cli compile --fqbn $(FQBN) --only-compilation-database --build-path ./build
 
 build:
 	arduino-cli compile --fqbn $(FQBN) .
