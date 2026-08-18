@@ -6,5 +6,5 @@ PORT := /dev/ttyUSB0
 build:
 	arduino-cli compile --fqbn $(FQBN) .
 
-up:
+up: build
 	arduino-cli upload -p $(PORT) --fqbn $(FQBN) .
