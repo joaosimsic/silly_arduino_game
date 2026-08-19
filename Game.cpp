@@ -116,8 +116,18 @@ bool Game::handlePause(unsigned long &elapsed) {
     remainingPauseMs -= consumed;
     elapsed -= consumed;
 
-    if (remainingPauseMs > 0)
+    if (remainingPauseMs > 0) {
+        if (Serial.available() > 0) {
+            while (Serial.available())
+                Serial.read();
+
+            buzzer.stop();
+            finishRound(false);
+            return true;
+        }
+
         return true;
+    }
 
     if (stepIndex + 1 < stepCount) {
         ++stepIndex;
@@ -141,6 +151,14 @@ bool Game::handleTone(unsigned long &elapsed) {
             Serial.read();
 
         finishRound(true);
+        return true;
+    }
+
+    if (stepIndex != specialIndex && Serial.available() > 0) {
+        while (Serial.available())
+            Serial.read();
+
+        finishRound(false);
         return true;
     }
 
