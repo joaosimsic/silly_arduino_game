@@ -1,6 +1,6 @@
 #include "Buzzer.h"
 
-const int BUZZER_PIN = 8;
+constexpr int BUZZER_PIN = 8;
 constexpr bool BUZZER_ENABLED = true;
 
 Buzzer buzzer(BUZZER_PIN, BUZZER_ENABLED);
