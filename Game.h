@@ -1,10 +1,11 @@
 #pragma once
 
 #include "Buzzer.h"
+#include "Jingle.h"
 
 class Game {
   public:
-    explicit Game(int buzzerPin, bool buzzerEnabled);
+    explicit Game(Buzzer &buzzer, Jingle &jingle);
 
     void setup();
     void update();
@@ -31,31 +32,19 @@ class Game {
     static constexpr unsigned long MIN_PAUSE_MS = 150;
     static constexpr unsigned long MAX_PAUSE_MS = 700;
     static constexpr unsigned long PRE_ROLL_MS = 1000;
-    static constexpr unsigned int NOTE_C4 = 262;
-    static constexpr unsigned int NOTE_E4 = 330;
-    static constexpr unsigned int NOTE_G4 = 392;
-    static constexpr unsigned int NOTE_C5 = 523;
-    static constexpr unsigned int NOTE_E5 = 659;
-    static constexpr unsigned int NOTE_G5 = 784;
-    static constexpr unsigned int NOTE_C6 = 1047;
-    static constexpr unsigned int MELODY[] = {
-        NOTE_C4, NOTE_E4, NOTE_G4, NOTE_C5, NOTE_E5, NOTE_G5, NOTE_C6,
-    };
-    static constexpr int MELODY_LEN = 7;
-    static constexpr unsigned long NOTE_MS = 150;
 
-    Buzzer buzzer;
+    Buzzer &buzzer;
+    Jingle &jingle;
     Step steps[MAX_STEPS];
     int stepCount = 0;
     int stepIndex = 0;
     int specialIndex = -1;
     unsigned long remainingToneMs = 0;
     unsigned long remainingPauseMs = 0;
+    bool toneStarted = false;
 
     unsigned long lastMillis = 0;
     unsigned long preRollMs = 0;
-    int melodyIndex = 0;
-    unsigned long melodyMsLeft = 0;
 
     State state = State::Idle;
     bool lastWasHit = false;
