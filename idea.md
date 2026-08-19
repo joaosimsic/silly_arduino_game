@@ -1,57 +1,89 @@
-# Idea: Random buzzer pattern game
+# Idea: Endless reflex/rhythm buzzer game
 
 ## Concept
 
-Procedurally generate a random buzzer pattern the user must react to.
-
-- Play a continuous stream of base-frequency tones with random durations and pauses.
-- At one random position in the stream, a clearly different frequency plays.
-- The user must press when they hear the different-frequency tone.
-- Everything is random: number of tones, each duration, each pause, and the special tone's position.
+- One **randomly generated rhythm** (random tone durations + pauses, exactly one random
+  "target" tone at a distinct frequency) is created **once per game**, *outside* the game
+  logic.
+- That rhythm **loops continuously**; every completed loop **speeds up** (all durations &
+  pauses scaled down), so the target window tightens over time.
+- The player presses a terminal key **precisely while the target tone sounds**.
+- **Hit** = press during the target tone → the loop keeps playing to the end (suspense) →
+  **happy** melody → next loop, faster.
+- **Miss** = press during any other tone/pause, *or* no press before the target tone ends →
+  the loop still finishes (suspense) → **sad** melody → game over.
+- **Endless**: the first miss ends the game. Score = number of loops cleared (per-session
+  only, no persistence).
 
 ## Input / output
 
-- Input: terminal keys (no physical button).
-- Output: buzzer tones + terminal messages.
+- Input: terminal keys (no physical button), Serial @ 9600.
+- Output: buzzer tones + serial messages.
 
-## Game flow
+## Rhythm generation (decoupled from Game)
 
-- Idle — serial prints "Press any key to start". A key press generates a fresh random
-  pattern and starts playback (small pre-roll of silence so the user is ready and stale
-  serial input is drained).
-- Playing — buzzer emits a continuous stream of base-frequency (300 Hz) tones with random
-  durations and random pauses. One random step is set to a special frequency (900 Hz).
-- Result — hit/miss evaluation, then a cheerful melody on the buzzer (same tune for win
-  and loss) and a HIT/MISS message on the serial port. Back to Idle.
+- New `Rhythm` class (`rhythm.h` / `rhythm.cpp`):
+  - owns `Step {unsigned int freq; unsigned long duration; unsigned long pause}[]`,
+    `stepCount`, `specialIndex`.
+  - `generate()` builds a random pattern (ranges below); called on game start, **not**
+    inside the game-update loop.
+  - exposes `count()`, `step(i)`, `specialIndex()`.
+- `Game` **consumes** a `Rhythm`; it never generates randomness itself.
+
+## Game flow (states)
+
+- **Idle** — serial prints `Press any key to start`. A key press → `rhythm.generate()`,
+  `speed = 1.0`, `loopCount = 0`, begin `Playing` with a short pre-roll (first loop only,
+  to drain stale serial and let the player get ready).
+- **Playing** — loop the rhythm:
+  - base tones at 300 Hz; target tone at `specialIndex` = 900 Hz.
+  - press **during target tone (or its grace pause)** → mark HIT, lock input for the rest
+    of the loop.
+  - press **during any other tone or pause** → mark MISS (loop still finishes).
+  - **target tone ends with no press** → mark MISS.
+  - when the whole loop finishes, reveal the outcome:
+    - HIT → `Happy`; MISS → `GameOver`.
+- **Happy** (reward) — play **happy** melody; on `done()` → `loopCount++`,
+  `speed *= SPEEDUP_FACTOR` (clamped to `MIN_SPEED`), restart `Playing` (faster loop).
+- **GameOver** — play **sad** melody; print `MISS! Loops cleared: N`; on `done()` → `Idle`.
+
+Serial debounce: at the start of every loop `awaitClear` drains any leftover/held key and
+requires the serial to be empty once before a press can be counted, so key auto-repeat
+cannot cause an instant double decision. The first press each loop decides the outcome;
+further presses are ignored until the next loop.
 
 ## Scoring
 
-- Press during the special tone's window = HIT.
-- Press during any distractor tone or pause = MISS (immediate).
-- No press by the time the special tone ends = MISS.
+- `loopCount` = loops fully cleared this game (per session only, no EEPROM).
+- Miss ends the game; score printed to serial.
 
-## Timing (configurable constants, placeholders)
+## Timing constants
 
-- steps: 4–9
-- tone duration: 150–400 ms
-- pause: 150–700 ms
-- special frequency: 900 Hz, base frequency: 300 Hz
-- result melody: happy ascending arpeggio (C4-E4-G4-C5-E5-G5-C6), 150 ms each
+- steps: 4–9 · tone: 150–400 ms · pause: 150–700 ms · base 300 Hz · target 900 Hz.
+- `SPEEDUP_FACTOR` ≈ 0.9 per loop; `MIN_SPEED` floor ≈ 0.3 (keeps tones ≥ ~20 ms so
+  `tone()` still works and stays humanly hittable).
+- pre-roll (first loop only) ≈ 1000 ms.
+- happy melody: ascending arpeggio C4-E4-G4-C5-E5-G5-C6, ~150 ms each.
+- sad melody: descending C5-G4-E4-C4, ~250 ms each, lower register.
 
 ## Implementation
 
-- `game.cpp` / `game.h` — implement `Game` class:
-  - own a `Buzzer` member; `setup()` runs buzzer init + `randomSeed(analogRead(A0))`;
-    keep `start()` / `update()`.
-  - `generatePattern()` builds a `Step {freq, duration, pause}` array with the ranges above.
-  - `update()` drives everything with `millis()` (non-blocking): tone playback, pause gaps,
-    serial input detection, state transitions, and a non-blocking melody sequencer.
-- `silly_arduino_game.ino` — `Serial.begin(9600)`, construct `Game`, call `setup()`/`update()`
-  from `loop()`; remove the hardcoded test tone.
-- `Buzzer.h` / `Buzzer.cpp` — no changes needed.
-- `Makefile` — add a `monitor` target for the serial terminal.
+- **`rhythm.h` / `rhythm.cpp`** (new) — `Rhythm` class + `generate()`.
+- **`jingle.h` / `jingle.cpp`** — support **two** melodies via `playHappy()` /
+  `playSad()`; keep the non-blocking `update()` / `done()` sequencer.
+- **`game.h` / `game.cpp`** — own `Buzzer` + `Jingle` + `Rhythm`. States
+  `Idle / Playing / Happy / GameOver`. Non-blocking `millis()` update; loop + speed scaling
+  applied to tone/pause durations on the fly (`duration * speed`). Serial debounce via
+  `awaitClear` + per-loop `decided` flag.
+- **`silly_arduino_game.ino`** — `Buzzer buzzer(...); Jingle jingle(buzzer); Rhythm rhythm;
+  Game game(buzzer, jingle, rhythm);`
+- **`Buzzer.h` / `Buzzer.cpp`** — no changes needed.
+- **`Makefile`** — unchanged (`build` / `up` / `monitor`).
 
 ## Verification
 
 - `make build` compiles for the Uno.
-- Play via `make up` then `make monitor`.
+- `make up` then `make monitor`: start, confirm the rhythm loops and audibly speeds up each
+  loop; hitting the target advances (happy melody) and the loop keeps playing through to the
+  end before the reveal; a mistimed press or a missed target plays the sad melody and prints
+  `Loops cleared: N`, then returns to idle.

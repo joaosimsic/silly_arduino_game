@@ -3,40 +3,60 @@
 #include "Buzzer.h"
 #include "HardwareSerial.h"
 #include "Jingle.h"
+#include "Rhythm.h"
 
-Game::Game(Buzzer &buzzer, Jingle &jingle) : buzzer(buzzer), jingle(jingle) {}
+Game::Game(Buzzer &buzzer, Jingle &jingle, Rhythm &rhythm)
+    : buzzer(buzzer), jingle(jingle), rhythm(rhythm) {}
 
 void Game::setup() {
     randomSeed(analogRead(A0));
     toIdle();
 }
 
-int Game::randomIn(int min, int max) { return min + random(max - min + 1); }
-
-void Game::generatePattern() {
-    stepCount = randomIn(MIN_STEPS, MAX_STEPS);
-    specialIndex = random(stepCount);
-
-    for (int i = 0; i < stepCount; i++) {
-        steps[i].freq = (i == specialIndex) ? SPECIAL_FREQ : BASE_FREQ;
-        steps[i].duration = randomIn(MIN_TONE_MS, MAX_TONE_MS);
-        steps[i].pause = randomIn(MIN_PAUSE_MS, MAX_PAUSE_MS);
-    }
-}
-
 void Game::toIdle() {
     state = State::Idle;
     buzzer.stop();
     Serial.println();
-    Serial.println("==  RANDOM BUZZER PATTERN GAME ==");
+    Serial.println("==  ENDLESS REFLEX BUZZER GAME ==");
     Serial.println("Press any key to start...");
 }
 
-void Game::finishRound(bool hit) {
-    lastWasHit = hit;
-    jingle.play();
-    Serial.println(hit ? "HIT!" : "MISS!");
-    state = State::Result;
+void Game::startGame() {
+    rhythm.generate();
+    speed = 1.0f;
+    loopCount = 0;
+    preRollMs = PRE_ROLL_MS;
+    startLoop();
+    Serial.println("Get ready...");
+}
+
+void Game::startLoop() {
+    stepIndex = 0;
+    toneStarted = false;
+    remainingToneMs = (unsigned long)(rhythm.step(0).duration * speed);
+    remainingPauseMs = 0;
+    decided = -1;
+    awaitClear = true;
+    lastMillis = millis();
+    state = State::Playing;
+}
+
+void Game::finishLoop() {
+    if (decided == 1) {
+        loopCount++;
+        speed *= SPEEDUP_FACTOR;
+        if (speed < MIN_SPEED)
+            speed = MIN_SPEED;
+        jingle.playHappy();
+        state = State::Happy;
+        Serial.print("HIT! Loop ");
+        Serial.println(loopCount);
+    } else {
+        jingle.playSad();
+        state = State::GameOver;
+        Serial.print("MISS! Loops cleared: ");
+        Serial.println(loopCount);
+    }
 }
 
 void Game::update() {
@@ -47,8 +67,11 @@ void Game::update() {
     case State::Playing:
         updatePlaying();
         break;
-    case State::Result:
-        updateResult();
+    case State::Happy:
+        updateHappy();
+        break;
+    case State::GameOver:
+        updateGameOver();
         break;
     }
 }
@@ -60,21 +83,26 @@ void Game::updateIdle() {
     while (Serial.available())
         Serial.read();
 
-    generatePattern();
-    stepIndex = 0;
-    toneStarted = false;
-    remainingToneMs = steps[0].duration;
-    remainingPauseMs = 0;
-    preRollMs = PRE_ROLL_MS;
-    lastMillis = millis();
-    state = State::Playing;
-    Serial.println("Get ready...");
+    startGame();
 }
 
 void Game::updatePlaying() {
     unsigned long now = millis();
     unsigned long elapsed = now - lastMillis;
     lastMillis = now;
+
+    if (awaitClear) {
+        if (Serial.available() > 0) {
+            while (Serial.available())
+                Serial.read();
+            return;
+        }
+        awaitClear = false;
+    } else if (decided == -1 && preRollMs == 0 && Serial.available() > 0) {
+        while (Serial.available())
+            Serial.read();
+        decided = (stepIndex == rhythm.specialIndex()) ? 1 : 0;
+    }
 
     while (elapsed > 0) {
         if (preRollMs > 0) {
@@ -93,7 +121,14 @@ void Game::updatePlaying() {
             return;
     }
 }
-void Game::updateResult() {
+
+void Game::updateHappy() {
+    jingle.update();
+    if (jingle.done())
+        startLoop();
+}
+
+void Game::updateGameOver() {
     jingle.update();
     if (jingle.done())
         toIdle();
@@ -116,50 +151,29 @@ bool Game::handlePause(unsigned long &elapsed) {
     remainingPauseMs -= consumed;
     elapsed -= consumed;
 
-    if (remainingPauseMs > 0) {
-        if (Serial.available() > 0) {
-            while (Serial.available())
-                Serial.read();
-
-            buzzer.stop();
-            finishRound(false);
-            return true;
+    if (remainingPauseMs == 0) {
+        if (stepIndex + 1 < rhythm.count()) {
+            ++stepIndex;
+            remainingToneMs =
+                (unsigned long)(rhythm.step(stepIndex).duration * speed);
+            toneStarted = false;
+            return false;
         }
 
+        finishLoop();
         return true;
     }
 
-    if (stepIndex + 1 < stepCount) {
-        ++stepIndex;
-        remainingToneMs = steps[stepIndex].duration;
-        toneStarted = false;
-        return false;
-    }
-
-    finishRound(false);
     return true;
 }
 
 bool Game::handleTone(unsigned long &elapsed) {
     if (!toneStarted) {
-        buzzer.tone(steps[stepIndex].freq, steps[stepIndex].duration);
+        unsigned long dur =
+            (unsigned long)(rhythm.step(stepIndex).duration * speed);
+        buzzer.tone(rhythm.step(stepIndex).freq, dur);
+        remainingToneMs = dur;
         toneStarted = true;
-    }
-
-    if (stepIndex == specialIndex && Serial.available() > 0) {
-        while (Serial.available())
-            Serial.read();
-
-        finishRound(true);
-        return true;
-    }
-
-    if (stepIndex != specialIndex && Serial.available() > 0) {
-        while (Serial.available())
-            Serial.read();
-
-        finishRound(false);
-        return true;
     }
 
     unsigned long consumed = min(elapsed, remainingToneMs);
@@ -169,7 +183,12 @@ bool Game::handleTone(unsigned long &elapsed) {
 
     if (remainingToneMs == 0) {
         buzzer.stop();
-        remainingPauseMs = steps[stepIndex].pause;
+
+        if (stepIndex == rhythm.specialIndex() && decided != 1)
+            decided = 0;
+
+        remainingPauseMs =
+            (unsigned long)(rhythm.step(stepIndex).pause * speed);
     }
 
     return remainingToneMs > 0;

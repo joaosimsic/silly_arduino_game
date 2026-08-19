@@ -6,18 +6,20 @@ class Jingle {
   public:
     explicit Jingle(Buzzer &buzzer);
 
-    void play();
+    void playHappy();
+    void playSad();
     void update();
     void stop();
     bool done() const;
 
   private:
-    static constexpr unsigned int NOTES[] = {262, 330, 392, 523,
-                                             659, 784, 1047};
-    static constexpr int NOTE_COUNT = 7;
-    static constexpr unsigned long NOTE_MS = 150;
+    static constexpr unsigned long HAPPY_MS = 150;
+    static constexpr unsigned long SAD_MS = 250;
 
     Buzzer &buzzer;
+    const unsigned int *notes = nullptr;
+    int noteCount = 0;
+    unsigned long noteMs = 0;
     int noteIndex = 0;
     unsigned long noteMsLeft = 0;
     unsigned long lastMillis = 0;
