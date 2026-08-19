@@ -7,7 +7,7 @@ const unsigned int HAPPY_NOTES[] = {262, 330, 392, 523, 659, 784, 1047};
 const int HAPPY_COUNT = 7;
 const unsigned int SAD_NOTES[] = {523, 392, 330, 262};
 const int SAD_COUNT = 4;
-} // namespace
+}
 
 Jingle::Jingle(Buzzer &buzzer) : buzzer(buzzer) {}
 

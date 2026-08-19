@@ -68,15 +68,23 @@ further presses are ignored until the next loop.
 
 ## Implementation
 
-- **`rhythm.h` / `rhythm.cpp`** (new) — `Rhythm` class + `generate()`.
-- **`jingle.h` / `jingle.cpp`** — support **two** melodies via `playHappy()` /
-  `playSad()`; keep the non-blocking `update()` / `done()` sequencer.
-- **`game.h` / `game.cpp`** — own `Buzzer` + `Jingle` + `Rhythm`. States
-  `Idle / Playing / Happy / GameOver`. Non-blocking `millis()` update; loop + speed scaling
-  applied to tone/pause durations on the fly (`duration * speed`). Serial debounce via
-  `awaitClear` + per-loop `decided` flag.
+- **`rhythm.h` / `rhythm.cpp`** — `Rhythm` class + `generate()`; pure data, no timing.
+- **`rhythm_player.h` / `rhythm_player.cpp`** (new) — the looping **timing engine**: a
+  segment cursor (`PreRoll / Tone / Pause`) over the `Rhythm`, speed scaling applied to
+  durations on the fly, drives `Buzzer` playback, and exposes one-shot event flags
+  (`toneStarted`, `targetToneStarted`, `targetToneEnded`, `loopCompleted`) plus
+  `isPreRoll()` / `targetWindowActive()`.
+- **`key_input.h` / `key_input.cpp`** (new) — debounced terminal-key detection: latches a
+  single press only after the serial line has been idle (`reset()` disarms at loop start to
+  drain stale/held keys), so auto-repeat can't double-fire.
+- **`jingle.h` / `jingle.cpp`** — two melodies via `playHappy()` / `playSad()`; keeps the
+  non-blocking `update()` / `done()` sequencer.
+- **`game.h` / `game.cpp`** — thin orchestrator. Owns `Buzzer` + `Jingle` + `Rhythm` and
+  composes a `RhythmPlayer` + `KeyInput`. States `Idle / Playing / Happy / GameOver`; reacts
+  to player events and key presses, tracks `Outcome { None, Hit, Miss }`, `speed`, and
+  `loopCount`. The speed-up (`SPEEDUP_FACTOR` ≈ 0.9, `MIN_SPEED` floor ≈ 0.3) lives here.
 - **`silly_arduino_game.ino`** — `Buzzer buzzer(...); Jingle jingle(buzzer); Rhythm rhythm;
-  Game game(buzzer, jingle, rhythm);`
+  Game game(buzzer, jingle, rhythm);` (the two helpers are created inside `Game`).
 - **`Buzzer.h` / `Buzzer.cpp`** — no changes needed.
 - **`Makefile`** — unchanged (`build` / `up` / `monitor`).
 
