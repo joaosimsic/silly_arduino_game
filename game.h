@@ -2,7 +2,7 @@
 
 class Game {
   public:
-    explicit Game(int buzzerPin);
+    explicit Game(int buzzerPin, bool buzzerEnabled);
 
     void start();
     void update();
