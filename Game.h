@@ -53,7 +53,12 @@ class Game {
     void generatePattern();
     void finishRound(bool hit);
     void toIdle();
+
     void updateIdle();
     void updatePlaying();
     void updateResult();
+
+    bool handlePreRoll(unsigned long &elapsed);
+    bool handlePause(unsigned long &elapsed);
+    bool handleTone(unsigned long &elapsed);
 };

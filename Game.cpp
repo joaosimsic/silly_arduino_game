@@ -1,14 +1,13 @@
 #include "Game.h"
 #include "Arduino.h"
+#include "Buzzer.h"
 #include "HardwareSerial.h"
+#include "Jingle.h"
 
-Game::Game(int buzzerPin, bool buzzerEnabled)
-    : buzzer(buzzerPin, buzzerEnabled) {}
+Game::Game(Buzzer &buzzer, Jingle &jingle) : buzzer(buzzer), jingle(jingle) {}
 
 void Game::setup() {
-    buzzer.setup();
     randomSeed(analogRead(A0));
-    Serial.begin(9600);
     toIdle();
 }
 
@@ -33,18 +32,37 @@ void Game::toIdle() {
     Serial.println("Press any key to start...");
 }
 
-void Game::updateIdle() {
-    bool hasPressed = Serial.available() > 0;
+void Game::finishRound(bool hit) {
+    lastWasHit = hit;
+    jingle.play();
+    Serial.println(hit ? "HIT!" : "MISS!");
+    state = State::Result;
+}
 
-    if (!hasPressed)
+void Game::update() {
+    switch (state) {
+    case State::Idle:
+        updateIdle();
+        break;
+    case State::Playing:
+        updatePlaying();
+        break;
+    case State::Result:
+        updateResult();
+        break;
+    }
+}
+
+void Game::updateIdle() {
+    if (Serial.available() == 0)
         return;
 
-    while (hasPressed) {
+    while (Serial.available())
         Serial.read();
-    }
 
     generatePattern();
     stepIndex = 0;
+    toneStarted = false;
     remainingToneMs = steps[0].duration;
     remainingPauseMs = 0;
     preRollMs = PRE_ROLL_MS;
@@ -58,14 +76,83 @@ void Game::updatePlaying() {
     unsigned long elapsed = now - lastMillis;
     lastMillis = now;
 
-    if (preRollMs > 0) {
-        buzzer.stop();
-        preRollMs = (elapsed >= preRollMs) ? 0 : preRollMs - elapsed;
-        return;
+    while (elapsed > 0) {
+        if (preRollMs > 0) {
+            if (handlePreRoll(elapsed))
+                return;
+            continue;
+        }
+
+        if (remainingPauseMs > 0) {
+            if (handlePause(elapsed))
+                return;
+            continue;
+        }
+
+        if (handleTone(elapsed))
+            return;
+    }
+}
+void Game::updateResult() {
+    jingle.update();
+    if (jingle.done())
+        toIdle();
+}
+
+bool Game::handlePreRoll(unsigned long &elapsed) {
+    unsigned long consumed = min(elapsed, preRollMs);
+
+    preRollMs -= consumed;
+    elapsed -= consumed;
+
+    buzzer.stop();
+
+    return preRollMs > 0;
+}
+
+bool Game::handlePause(unsigned long &elapsed) {
+    unsigned long consumed = min(elapsed, remainingPauseMs);
+
+    remainingPauseMs -= consumed;
+    elapsed -= consumed;
+
+    if (remainingPauseMs > 0)
+        return true;
+
+    if (stepIndex + 1 < stepCount) {
+        ++stepIndex;
+        remainingToneMs = steps[stepIndex].duration;
+        toneStarted = false;
+        return false;
     }
 
-    bool hasPressed = Serial.available() > 0;
+    finishRound(false);
+    return true;
+}
 
-    if (remainingPauseMs <= 0)
-        return;
+bool Game::handleTone(unsigned long &elapsed) {
+    if (!toneStarted) {
+        buzzer.tone(steps[stepIndex].freq, steps[stepIndex].duration);
+        toneStarted = true;
+    }
+
+    if (stepIndex == specialIndex && Serial.available() > 0) {
+        while (Serial.available())
+            Serial.read();
+
+        finishRound(true);
+        return true;
+    }
+
+    unsigned long consumed = min(elapsed, remainingToneMs);
+
+    remainingToneMs -= consumed;
+    elapsed -= consumed;
+
+    if (remainingToneMs == 0) {
+        buzzer.stop();
+        remainingPauseMs = steps[stepIndex].pause;
+    }
+
+    return remainingToneMs > 0;
 }
