@@ -1,17 +1,14 @@
-#define BUZZER_ENABLED 0
+#include "Buzzer.h"
 
-const int BUZZER = 8;
+const int BUZZER_PIN = 8;
+constexpr bool BUZZER_ENABLED = false;
+
+Buzzer buzzer(BUZZER_PIN, BUZZER_ENABLED);
 
 void setup() {
-  pinMode(BUZZER, OUTPUT);
+  buzzer.setup();
 }
 
 void loop() {
-#if BUZZER_ENABLED
-  tone(BUZZER, 500);
-  delay(500);
-
-  noTone(BUZZER);
-  delay(500);
-#endif
+  buzzer.tone(500, 1);
 }
