@@ -50,5 +50,20 @@ class Game {
     void handleDebugCommand(char *line);
     void printDebugHelp();
 
+    void showLine();
+    void recallHistory(int dir);
+    void addHistory(const char *s);
+
     static int tokenize(char *s, char **tok, int maxTok);
+
+    static constexpr int DEBUG_LINE_MAX = 64;
+    static constexpr int HIST_MAX = 4;
+
+    char cmdLine[DEBUG_LINE_MAX] = {0};
+    int cmdLen = 0;
+    int cmdShown = 0;
+    char history[HIST_MAX][DEBUG_LINE_MAX] = {{0}};
+    int histCount = 0;
+    int histPos = 0;
+    int escState = 0;
 };

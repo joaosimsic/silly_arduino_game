@@ -167,9 +167,14 @@ void Game::updateGameOver() {
 void Game::enterDebug() {
     state = State::Debug;
     buzzer.stop();
+    cmdLen = 0;
+    cmdShown = 0;
+    histPos = histCount;
+    escState = 0;
     Serial.println();
     Serial.println(F("== DEBUG / TUNING MODE =="));
     printDebugHelp();
+    Serial.print(F("> "));
 }
 
 void Game::printDebugHelp() {
@@ -192,26 +197,107 @@ void Game::printDebugHelp() {
     Serial.println(F("  start              start game with current values"));
     Serial.println(F("  reset              restore defaults"));
     Serial.println(F("  exit               back to idle"));
+    Serial.println(F("  ^/v arrows        recall command history"));
+}
+
+void Game::showLine() {
+    Serial.write('\r');
+    Serial.print(F("> "));
+    for (int i = 0; i < cmdLen; i++)
+        Serial.write(cmdLine[i]);
+    for (int i = cmdLen; i < cmdShown; i++)
+        Serial.write(' ');
+    for (int i = cmdLen; i < cmdShown; i++)
+        Serial.write('\b');
+    cmdShown = cmdLen;
+}
+
+void Game::recallHistory(int dir) {
+    histPos += dir;
+    if (histPos < 0)
+        histPos = 0;
+    if (histPos > histCount)
+        histPos = histCount;
+    if (histPos == histCount) {
+        cmdLen = 0;
+    } else {
+        strncpy(cmdLine, history[histPos],
+                (size_t)DEBUG_LINE_MAX - 1);
+        cmdLine[DEBUG_LINE_MAX - 1] = '\0';
+        cmdLen = (int)strlen(cmdLine);
+    }
+    showLine();
+}
+
+void Game::addHistory(const char *s) {
+    if (histCount > 0 && strcmp(history[histCount - 1], s) == 0)
+        return; // skip duplicate of last entry
+    if (histCount < HIST_MAX) {
+        strncpy(history[histCount], s, (size_t)DEBUG_LINE_MAX - 1);
+        history[histCount][DEBUG_LINE_MAX - 1] = '\0';
+        histCount++;
+    } else {
+        for (int i = 0; i < HIST_MAX - 1; i++)
+            strncpy(history[i], history[i + 1], (size_t)DEBUG_LINE_MAX);
+        strncpy(history[HIST_MAX - 1], s, (size_t)DEBUG_LINE_MAX - 1);
+        history[HIST_MAX - 1][DEBUG_LINE_MAX - 1] = '\0';
+    }
 }
 
 void Game::updateDebug() {
-    if (Serial.available() == 0)
-        return;
+    while (Serial.available() > 0) {
+        int c = Serial.read();
 
-    static char buf[64];
-    int len = Serial.readBytesUntil('\n', buf, sizeof(buf) - 1);
-    if (len <= 0)
-        return;
-    buf[len] = '\0';
-    if (len > 0 && (buf[len - 1] == '\r' || buf[len - 1] == '\n'))
-        buf[len - 1] = '\0';
-    // drain any leftover bytes from an over-long line
-    while (Serial.available() && Serial.peek() != '\n')
-        Serial.read();
-    if (Serial.available() && Serial.peek() == '\n')
-        Serial.read();
+        if (escState == 1) {
+            if (c == '[' || c == 'O') {
+                escState = 2;
+                continue;
+            }
+            escState = 0;
+        }
+        if (escState == 2) {
+            escState = 0;
+            if (c == 'A')
+                recallHistory(-1); // up
+            else if (c == 'B')
+                recallHistory(1); // down
+            continue;
+        }
 
-    handleDebugCommand(buf);
+        if (c == 27) { // ESC
+            escState = 1;
+            continue;
+        }
+        if (c == '\n' || c == '\r') {
+            Serial.println();
+            cmdLine[cmdLen] = '\0';
+            if (cmdLen > 0) {
+                addHistory(cmdLine);
+                handleDebugCommand(cmdLine);
+            }
+            cmdLen = 0;
+            cmdShown = 0;
+            histPos = histCount;
+            if (state == State::Debug)
+                Serial.print(F("> "));
+            continue;
+        }
+        if (c == '\b' || c == 0x7F) { // backspace / delete
+            if (cmdLen > 0) {
+                cmdLen--;
+                Serial.print(F("\b \b"));
+            }
+            continue;
+        }
+        if (c >= 0x20 && c < 0x7F) { // printable
+            if (cmdLen < (int)sizeof(cmdLine) - 1) {
+                cmdLine[cmdLen++] = (char)c;
+                Serial.write(c);
+            }
+            continue;
+        }
+        // ignore other control chars
+    }
 }
 
 int Game::tokenize(char *s, char **tok, int maxTok) {
@@ -437,9 +523,12 @@ void Game::handleDebugCommand(char *line) {
         for (long f = a; f <= b; f += c) {
             if (!Tuning::freqValid((unsigned int)f))
                 continue;
-            buzzer.tone((unsigned int)f, DEBUG_TONE_MS);
             Serial.println(f);
-            delay(DEBUG_TONE_MS + DEBUG_SWEEP_GAP_MS);
+            buzzer.stop();
+            buzzer.tone((unsigned int)f, DEBUG_TONE_MS);
+            delay(DEBUG_TONE_MS);
+            buzzer.stop();
+            delay(DEBUG_SWEEP_GAP_MS);
         }
         buzzer.stop();
         Serial.println(F("sweep done"));
