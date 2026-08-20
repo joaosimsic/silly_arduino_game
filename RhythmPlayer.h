@@ -2,10 +2,11 @@
 
 #include "Buzzer.h"
 #include "Rhythm.h"
+#include "Tuning.h"
 
 class RhythmPlayer {
   public:
-    RhythmPlayer(Buzzer &buzzer, Rhythm &rhythm);
+    RhythmPlayer(Buzzer &buzzer, Rhythm &rhythm, Tuning &tuning);
 
     void startLoop(float speed, bool withPreRoll);
     void update(unsigned long dt);
@@ -19,16 +20,15 @@ class RhythmPlayer {
 
     bool targetWindowActive() const {
         return (seg == Seg::Tone && stepIndex == rhythm.specialIndex()) ||
-               (seg == Seg::Pause && stepIndex == rhythm.specialIndex());
+                (seg == Seg::Pause && stepIndex == rhythm.specialIndex());
     }
 
   private:
     enum class Seg { PreRoll, Tone, Pause };
 
-    static constexpr unsigned long PRE_ROLL_MS = 1000;
-
     Buzzer &buzzer;
     Rhythm &rhythm;
+    Tuning &tuning;
 
     float speed = 1.0f;
     Seg seg = Seg::PreRoll;

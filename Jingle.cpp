@@ -2,35 +2,30 @@
 #include "Buzzer.h"
 #include <Arduino.h>
 
-namespace {
-const unsigned int HAPPY_NOTES[] = {262, 330, 392, 523, 659, 784, 1047};
-const int HAPPY_COUNT = 7;
-const unsigned int SAD_NOTES[] = {523, 392, 330, 262};
-const int SAD_COUNT = 4;
-}
-
-Jingle::Jingle(Buzzer &buzzer) : buzzer(buzzer) {}
+Jingle::Jingle(Buzzer &buzzer, Tuning &tuning) : buzzer(buzzer), tuning(tuning) {}
 
 void Jingle::playHappy() {
-    notes = HAPPY_NOTES;
-    noteCount = HAPPY_COUNT;
-    noteMs = HAPPY_MS;
+    notes = tuning.happyNotes;
+    noteCount = tuning.happyCount;
+    noteMs = tuning.happyMs;
     noteIndex = 0;
     noteMsLeft = noteMs;
     lastMillis = millis();
     playing = true;
-    buzzer.tone(notes[0], noteMs);
+    if (noteCount > 0)
+        buzzer.tone(notes[0], noteMs);
 }
 
 void Jingle::playSad() {
-    notes = SAD_NOTES;
-    noteCount = SAD_COUNT;
-    noteMs = SAD_MS;
+    notes = tuning.sadNotes;
+    noteCount = tuning.sadCount;
+    noteMs = tuning.sadMs;
     noteIndex = 0;
     noteMsLeft = noteMs;
     lastMillis = millis();
     playing = true;
-    buzzer.tone(notes[0], noteMs);
+    if (noteCount > 0)
+        buzzer.tone(notes[0], noteMs);
 }
 
 void Jingle::update() {

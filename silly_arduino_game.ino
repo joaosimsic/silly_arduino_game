@@ -3,14 +3,17 @@
 #include "HardwareSerial.h"
 #include "Jingle.h"
 #include "Rhythm.h"
+#include "Tuning.h"
 
 constexpr int BUZZER_PIN = 8;
 constexpr bool BUZZER_ENABLED = true;
+constexpr bool DEBUG_MODE = true;
 
 Buzzer buzzer(BUZZER_PIN, BUZZER_ENABLED);
-Jingle jingle(buzzer);
-Rhythm rhythm;
-Game game(buzzer, jingle, rhythm);
+Tuning tuning;
+Jingle jingle(buzzer, tuning);
+Rhythm rhythm(tuning);
+Game game(buzzer, jingle, rhythm, tuning, DEBUG_MODE);
 
 void setup() {
     Serial.begin(9600);
@@ -18,4 +21,6 @@ void setup() {
     game.setup();
 }
 
-void loop() { game.update(); }
+void loop() {
+    game.update();
+}

@@ -1,10 +1,11 @@
 #pragma once
 
 #include "Buzzer.h"
+#include "Tuning.h"
 
 class Jingle {
   public:
-    explicit Jingle(Buzzer &buzzer);
+    explicit Jingle(Buzzer &buzzer, Tuning &tuning);
 
     void playHappy();
     void playSad();
@@ -13,10 +14,8 @@ class Jingle {
     bool done() const;
 
   private:
-    static constexpr unsigned long HAPPY_MS = 150;
-    static constexpr unsigned long SAD_MS = 250;
-
     Buzzer &buzzer;
+    Tuning &tuning;
     const unsigned int *notes = nullptr;
     int noteCount = 0;
     unsigned long noteMs = 0;

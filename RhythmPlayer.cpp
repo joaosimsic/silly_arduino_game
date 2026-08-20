@@ -3,8 +3,8 @@
 #include "Rhythm.h"
 #include <Arduino.h>
 
-RhythmPlayer::RhythmPlayer(Buzzer &buzzer, Rhythm &rhythm)
-    : buzzer(buzzer), rhythm(rhythm) {}
+RhythmPlayer::RhythmPlayer(Buzzer &buzzer, Rhythm &rhythm, Tuning &tuning)
+    : buzzer(buzzer), rhythm(rhythm), tuning(tuning) {}
 
 void RhythmPlayer::startLoop(float spd, bool withPreRoll) {
     speed = spd;
@@ -16,7 +16,7 @@ void RhythmPlayer::startLoop(float spd, bool withPreRoll) {
 
     if (withPreRoll) {
         seg = Seg::PreRoll;
-        segRemaining = PRE_ROLL_MS;
+        segRemaining = tuning.preRollMs;
         buzzer.stop();
         return;
     }

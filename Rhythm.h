@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Tuning.h"
+
 struct Step {
     unsigned int freq;
     unsigned long duration;
@@ -8,7 +10,7 @@ struct Step {
 
 class Rhythm {
   public:
-    Rhythm();
+    explicit Rhythm(Tuning &tuning);
 
     void generate();
 
@@ -17,15 +19,9 @@ class Rhythm {
     int specialIndex() const { return specialIndex_; }
 
   private:
-    static constexpr unsigned int BASE_FREQ = 300;
-    static constexpr unsigned int SPECIAL_FREQ = 900;
-    static constexpr int MIN_STEPS = 4;
     static constexpr int MAX_STEPS = 9;
-    static constexpr unsigned long MIN_TONE_MS = 150;
-    static constexpr unsigned long MAX_TONE_MS = 400;
-    static constexpr unsigned long MIN_PAUSE_MS = 150;
-    static constexpr unsigned long MAX_PAUSE_MS = 700;
 
+    Tuning &tuning;
     Step steps[MAX_STEPS];
     int stepCount = 0;
     int specialIndex_ = -1;
